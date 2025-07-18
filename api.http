@@ -1,0 +1,20 @@
+POST http://localhost:9999/payments HTTP/1.1
+Content-Type: application/json
+
+{
+    "correlationId": "4a7101b2-7d26-4d9d-aa19-4dc1c7cf60b3",
+    "amount": 19.90
+}
+###
+POST http://localhost:9999/purge-payments HTTP/1.1
+Content-Type: application/json
+
+###
+
+GET http://localhost:9999/payments-summary HTTP/1.1
+Content-Type: application/json
+
+###
+
+GET http://localhost:9999/payments-summary?from=2025-07-18T01:17:41.065Z&to=2025-07-18T01:18:00.065Z HTTP/1.1
+Content-Type: application/json
