@@ -7,7 +7,7 @@ $pdo = getPdo();
 if ($method === 'POST' && $requestUri === '/purge-payments') {
     header('Content-Type: application/json');
     http_response_code(200);
-    $sql = "TRUNCATE laravel.payments;";
+    $sql = "TRUNCATE payments;";
     $stmt = $pdo->prepare($sql);
     $stmt->execute();
     echo json_encode(['message' => 'All payments purged.']);
@@ -18,7 +18,7 @@ if ($method === 'POST' && $requestUri === '/payments') {
     
     $_REQUEST = json_decode(file_get_contents('php://input'), true);
 
-    if (!isset($requestBody['correlationId'], $requestBody['amount'])) {
+    if (!isset($_REQUEST['correlationId'], $_REQUEST['amount'])) {
         exit;
     }
     
@@ -42,6 +42,8 @@ if ($method === 'POST' && $requestUri === '/payments') {
 
     if ($success) {
         http_response_code(200);
+        fastcgi_finish_request();
+        
         savePayment($pdo, $body+['processor' => $processor]);
         exit;
     } 
@@ -106,7 +108,7 @@ if ($method === 'GET' && $requestUri === '/payments-summary') {
     }
 
     echo json_encode($data);
-    exit();
+    exit;
 }
 
 function sendPaymentRequest($processor, $body): bool
@@ -126,19 +128,28 @@ function sendPaymentRequest($processor, $body): bool
 
 function getPdo(): PDO {
     static $pdo;
-    if ($pdo === null) {
-        $host = 'db';
-        $db = 'rinha';
-        $user = 'username';
-        $pass = 'userpass';
-        $charset = 'utf8mb4';
-
-        $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-        $pdo = new PDO($dsn, $user, $pass, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_EMULATE_PREPARES => false,
-        ]);
+    try {
+        
+        if ($pdo === null) {
+            $host = 'db';
+            $db = 'rinha';
+            $user = 'root';
+            $pass = 'root';
+            $charset = 'utf8mb4';
+            
+            $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
+            $pdo = new PDO($dsn, $user, $pass, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ]);
+        }
+    } catch (\exception $e) {
+        header('Content-Type: application/json');
+        http_response_code(500);
+        echo json_encode(['message' => $e->getMessage()]);
+        exit;
     }
+    
     return $pdo;
 }
 

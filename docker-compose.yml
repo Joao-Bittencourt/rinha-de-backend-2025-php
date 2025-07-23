@@ -1,9 +1,10 @@
 services:
     app1:
-        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.4
+        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.5
         build:
             context: .
-            dockerfile: Dockerfile        restart: unless-stopped
+            dockerfile: Dockerfile
+        restart: unless-stopped
         working_dir: /var/www/
         networks:
             - rinha
@@ -15,7 +16,7 @@ services:
                     memory: "25MB"
 
     app2:
-        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.4
+        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.5
         build:
             context: .
             dockerfile: Dockerfile
@@ -65,8 +66,6 @@ services:
             --max_connections=1000
             --innodb_flush_log_at_trx_commit=2
             --skip-log-bin
-        ports:
-            - "3388:3306"
         networks:
             - rinha
         deploy:
@@ -80,4 +79,3 @@ networks:
         driver: bridge
     payment-processor:
         external: true
-

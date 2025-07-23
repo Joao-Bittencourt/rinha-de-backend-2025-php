@@ -23,6 +23,10 @@ RUN docker-php-ext-install -j$(nproc) \
     pdo_mysql \
     mbstring
 
+COPY ./opcache.ini /usr/local/etc/php/conf.d/10-opcache.ini
+
+COPY ./src/index.php /var/www/index.php
+
 WORKDIR /var/www
 
 EXPOSE 9000
