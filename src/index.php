@@ -2,17 +2,7 @@
 
 $method = $_SERVER['REQUEST_METHOD'] ?: null;
 $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
-$pdo = getPdo();
-
-if ($method === 'POST' && $requestUri === '/purge-payments') {
-    header('Content-Type: application/json');
-    http_response_code(200);
-    $sql = "TRUNCATE payments;";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute();
-    echo json_encode(['message' => 'All payments purged.']);
-    exit;
-}
+$redis = getRedisClient();
 
 if ($method === 'POST' && $requestUri === '/payments') {
     
@@ -28,86 +18,89 @@ if ($method === 'POST' && $requestUri === '/payments') {
   
     $body = [
         'correlationId' => $_REQUEST['correlationId'],
-        'amount' => (float)$_REQUEST['amount'],
+        'amount' => $_REQUEST['amount'],
         'requestedAt' => $requestedAtString,
     ];
 
     $processor = 'default';
-    $success = sendPaymentRequest('default', $body);
-
-    if (!$success) {
-        $processor = 'fallback';
-        $success = sendPaymentRequest('fallback', $body);
-    }
-
-    if ($success) {
-        http_response_code(200);
-        fastcgi_finish_request();
+    $success = false;
+    while ($success === false) {
         
-        savePayment($pdo, $body+['processor' => $processor]);
-        exit;
+        $success = sendPaymentRequest($processor, $body);
+        
+        if ($success) {
+            http_response_code(200);
+            fastcgi_finish_request();
+            
+            savePayment($redis, $body+['processor' => $processor]);
+            exit;
+        }
+        $processor =  $processor === 'default' ? 'fallback' : 'default';
     } 
    
     exit;
 }
 
 if ($method === 'GET' && $requestUri === '/payments-summary') {
-    
     header('Content-Type: application/json');
-    http_response_code(200);
-    
-    $conditions = [];
-    $params = [];
 
-    if (!empty($_GET['from'])) {
-        $conditions[] = "requested_at >= :from";
-       $params[':from'] = rtrim(str_replace('T', ' ', $_GET['from']), 'Z');
-    }
-
-    if (!empty($_GET['to'])) {
-        $conditions[] = "requested_at <= :to";
-        $params[':to'] = rtrim(str_replace('T', ' ', $_GET['to']), 'Z');
-    }
-
-    $where = '';
-    if ($conditions) {
-        $where = " WHERE " . implode(" AND ", $conditions);
-    }
-    $sql = "
-        SELECT
-            processor,
-            SUM(amount) AS totalAmount,
-            COUNT(id) AS totalRequests
-        FROM
-            payments
-        {$where}    
-        GROUP BY
-            processor
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $results = $stmt->fetchAll(\PDO::FETCH_OBJ);
-
-    $data = [
+    $summaryData = [
         'default' => [
-            'totalAmount' => 0,
-            'totalRequests' => 0
+            'totalRequests' => 0,
+            'totalAmount' => 0
         ],
         'fallback' => [
-            'totalAmount' => 0,
-            'totalRequests' => 0
+            'totalRequests' => 0,
+            'totalAmount' => 0
         ]
     ];
 
-    foreach($results as $result) {
-        $data[$result->processor] = [
-            'totalAmount' => $result->totalAmount,
-            'totalRequests' => $result->totalRequests,
-        ];
+    if (!$redis) {
+        http_response_code(500);
+        echo json_encode(['message' => 'Erro ao conectar ao Redis.']);
+        exit;
     }
 
-    echo json_encode($data);
+    $paymentsJson = $redis->lrange('payments', 0, -1);
+    
+    if ($paymentsJson === false || $paymentsJson === null) {
+        http_response_code(200);
+        echo json_encode($summaryData);
+        exit;
+    }
+    
+    $from = $_GET['from'] ?? null;
+    $to = $_GET['to'] ?? null;
+    
+    foreach ($paymentsJson as $payment) {
+        $payment = json_decode($payment, true);
+        
+        if (($from && $payment['requested_at'] < $from) || ($to && $payment['requested_at'] > $to)) {
+            continue; 
+        }
+
+        $processor = $payment['processor'];
+        $amount = $payment['amount'];
+
+        $summaryData[$processor]['totalRequests']++;
+        $summaryData[$processor]['totalAmount'] += $amount;
+        
+    }
+
+    $summaryData['default']['totalAmount'] = (float) number_format($summaryData['default']['totalAmount'], 2, '.', '');
+    $summaryData['fallback']['totalAmount'] = (float) number_format($summaryData['fallback']['totalAmount'], 2, '.', '');
+
+    http_response_code(200);
+    echo json_encode($summaryData);
+    exit;   
+}
+
+if ($method === 'POST' && $requestUri === '/purge-payments') {
+    header('Content-Type: application/json');
+    http_response_code(200);
+
+    $redis->del('payments');
+    echo json_encode(['message' => 'All payments purged.']);
     exit;
 }
 
@@ -126,43 +119,36 @@ function sendPaymentRequest($processor, $body): bool
     return $httpCode >= 200 && $httpCode < 300;
 }
 
-function getPdo(): PDO {
-    static $pdo;
-    try {
-        
-        if ($pdo === null) {
-            $host = 'db';
-            $db = 'rinha';
-            $user = 'root';
-            $pass = 'root';
-            $charset = 'utf8mb4';
-            
-            $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-            $pdo = new PDO($dsn, $user, $pass, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_EMULATE_PREPARES => false,
-            ]);
+function getRedisClient() {
+    static $redis;
+
+    if ($redis === null) {
+        try {
+            $redis = new Redis();
+            $redis->connect('redis', 6379); 
+        } catch (RedisException $e) {
+            header('Content-Type: application/json');
+            http_response_code(500);
+            echo json_encode(['message' => 'Erro ao conectar ao Redis: ' . $e->getMessage()]);
+            exit;
         }
-    } catch (\exception $e) {
-        header('Content-Type: application/json');
-        http_response_code(500);
-        echo json_encode(['message' => $e->getMessage()]);
-        exit;
     }
-    
-    return $pdo;
+
+    return $redis;
 }
 
-function savePayment($pdo, array $data): void {
-      
+function savePayment($redis, array $data): void {
+    
     try {
-        $sql = "INSERT INTO payments (correlation_id, amount, requested_at, processor) 
-                VALUES (:correlationId, :amount, :requestedAt, :processor)";
+        $redisData = [
+            'amount'       => $data['amount'],
+            'requested_at' => $data['requested_at'],
+            'processor'    => $data['processor'],
+        ];
 
-        $stmt = $pdo->prepare($sql);
-        $data['requestedAt'] = rtrim(str_replace('T', ' ', $data['requestedAt']), 'Z');
-        $stmt->execute($data);
-    } catch (\PDOException $e) {
-        throw new \PDOException($e->getMessage(), (int)$e->getCode());
+        $redis->lpush('payments', json_encode($redisData));
+
+    } catch (RedisException $e) {
+        // OK
     }
 }
