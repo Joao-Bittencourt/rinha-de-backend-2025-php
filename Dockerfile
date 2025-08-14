@@ -1,4 +1,4 @@
-FROM php:8.2-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 RUN apk add --no-cache \
     build-base \
@@ -23,6 +23,7 @@ RUN docker-php-ext-install -j$(nproc) \
     pdo_mysql \
     mbstring
 
+COPY ./php-fpm.conf /usr/local/etc/php-fpm.d/zz-custom.conf
 COPY ./opcache.ini /usr/local/etc/php/conf.d/10-opcache.ini
 
 COPY ./src/index.php /var/www/index.php

@@ -1,6 +1,6 @@
 services:
     app1:
-        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.5
+        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.7
         build:
             context: .
             dockerfile: Dockerfile
@@ -16,7 +16,7 @@ services:
                     memory: "25MB"
 
     app2:
-        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.5
+        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.7
         build:
             context: .
             dockerfile: Dockerfile

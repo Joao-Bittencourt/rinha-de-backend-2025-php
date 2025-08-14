@@ -4,16 +4,6 @@ $method = $_SERVER['REQUEST_METHOD'] ?: null;
 $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
 $pdo = getPdo();
 
-if ($method === 'POST' && $requestUri === '/purge-payments') {
-    header('Content-Type: application/json');
-    http_response_code(200);
-    $sql = "TRUNCATE payments;";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute();
-    echo json_encode(['message' => 'All payments purged.']);
-    exit;
-}
-
 if ($method === 'POST' && $requestUri === '/payments') {
     
     $_REQUEST = json_decode(file_get_contents('php://input'), true);
@@ -21,6 +11,9 @@ if ($method === 'POST' && $requestUri === '/payments') {
     if (!isset($_REQUEST['correlationId'], $_REQUEST['amount'])) {
         exit;
     }
+
+    http_response_code(200);
+    fastcgi_finish_request();
     
     $preciseTimestamp = microtime(true);
     $date = DateTime::createFromFormat('U.u', sprintf('%.6f', $preciseTimestamp));
@@ -41,8 +34,6 @@ if ($method === 'POST' && $requestUri === '/payments') {
     }
 
     if ($success) {
-        http_response_code(200);
-        fastcgi_finish_request();
         
         savePayment($pdo, $body+['processor' => $processor]);
         exit;
@@ -77,7 +68,7 @@ if ($method === 'GET' && $requestUri === '/payments-summary') {
         SELECT
             processor,
             SUM(amount) AS totalAmount,
-            COUNT(id) AS totalRequests
+            COUNT(*) AS totalRequests
         FROM
             payments
         {$where}    
@@ -106,8 +97,17 @@ if ($method === 'GET' && $requestUri === '/payments-summary') {
             'totalRequests' => $result->totalRequests,
         ];
     }
-
     echo json_encode($data);
+    exit;
+}
+
+if ($method === 'POST' && $requestUri === '/purge-payments') {
+    header('Content-Type: application/json');
+    http_response_code(200);
+    $sql = "TRUNCATE payments;";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute();
+    echo json_encode(['message' => 'All payments purged.']);
     exit;
 }
 
@@ -154,10 +154,9 @@ function getPdo(): PDO {
 }
 
 function savePayment($pdo, array $data): void {
-      
     try {
-        $sql = "INSERT INTO payments (correlation_id, amount, requested_at, processor) 
-                VALUES (:correlationId, :amount, :requestedAt, :processor)";
+        $sql = "INSERT INTO payments (amount, requested_at, processor) 
+                VALUES (:amount, :requestedAt, :processor)";
 
         $stmt = $pdo->prepare($sql);
         $data['requestedAt'] = rtrim(str_replace('T', ' ', $data['requestedAt']), 'Z');
