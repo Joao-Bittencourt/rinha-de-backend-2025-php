@@ -1,9 +1,8 @@
 FROM php:8.4-fpm-alpine
 
 RUN apk add --no-cache \
-    postgresql-dev \
     nginx \
-    && docker-php-ext-install pdo_pgsql pcntl opcache
+    && docker-php-ext-install pcntl opcache
 
 RUN apk add --no-cache \
     git \

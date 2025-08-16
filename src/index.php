@@ -3,7 +3,6 @@
 $method = $_SERVER['REQUEST_METHOD'] ?: null;
 $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
 $redis = getRedisClient();
-$redis = getRedisClient();
 
 if ($method === 'POST' && $requestUri === '/payments') {
     
@@ -31,10 +30,7 @@ if ($method === 'POST' && $requestUri === '/payments') {
         
         $success = sendPaymentRequest($processor, $body);
         
-        if ($success) {
-            http_response_code(200);
-            fastcgi_finish_request();
-            
+        if ($success) {            
             savePayment($redis, $body+['processor' => $processor]);
             exit;
         }
