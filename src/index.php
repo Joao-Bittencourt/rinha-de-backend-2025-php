@@ -26,19 +26,18 @@ if ($method === 'POST' && $requestUri === '/payments') {
     ];
 
     $processor = 'default';
-    $success = sendPaymentRequest('default', $body);
-
-    if (!$success) {
-        $processor = 'fallback';
-        $success = sendPaymentRequest('fallback', $body);
-    }
-
-    if ($success) {
+    $success = false;
+    while ($success === false) {
         
-        savePayment($pdo, $body+['processor' => $processor]);
-        exit;
+        $success = sendPaymentRequest($processor, $body);
+        
+        if ($success) {             
+            savePayment($pdo, $body+['processor' => $processor]);
+            exit;
+        }
+        $processor =  $processor === 'default' ? 'fallback' : 'default';
     } 
-   
+    
     exit;
 }
 
@@ -159,8 +158,10 @@ function savePayment($pdo, array $data): void {
                 VALUES (:amount, :requestedAt, :processor)";
 
         $stmt = $pdo->prepare($sql);
-        $data['requestedAt'] = rtrim(str_replace('T', ' ', $data['requestedAt']), 'Z');
-        $stmt->execute($data);
+        $params['amount'] = $data['amount'];
+        $params['requestedAt'] = rtrim(str_replace('T', ' ', $data['requestedAt']), 'Z');
+        $params['processor'] = $data['processor'];
+        $stmt->execute($params);        
     } catch (\PDOException $e) {
         throw new \PDOException($e->getMessage(), (int)$e->getCode());
     }
