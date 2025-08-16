@@ -3,6 +3,7 @@
 $method = $_SERVER['REQUEST_METHOD'] ?: null;
 $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
 $redis = getRedisClient();
+$redis = getRedisClient();
 
 if ($method === 'POST' && $requestUri === '/payments') {
     
@@ -11,6 +12,8 @@ if ($method === 'POST' && $requestUri === '/payments') {
     if (!isset($_REQUEST['correlationId'], $_REQUEST['amount'])) {
         exit;
     }
+    http_response_code(200);
+    fastcgi_finish_request();
     
     $preciseTimestamp = microtime(true);
     $date = DateTime::createFromFormat('U.u', sprintf('%.6f', $preciseTimestamp));
@@ -44,6 +47,12 @@ if ($method === 'POST' && $requestUri === '/payments') {
 if ($method === 'GET' && $requestUri === '/payments-summary') {
     header('Content-Type: application/json');
 
+    if (!$redis) {
+        http_response_code(500);
+        echo json_encode(['message' => 'Erro ao conectar ao Redis.']);
+        exit;
+    }
+
     $summaryData = [
         'default' => [
             'totalRequests' => 0,
@@ -54,12 +63,6 @@ if ($method === 'GET' && $requestUri === '/payments-summary') {
             'totalAmount' => 0
         ]
     ];
-
-    if (!$redis) {
-        http_response_code(500);
-        echo json_encode(['message' => 'Erro ao conectar ao Redis.']);
-        exit;
-    }
 
     $paymentsJson = $redis->lrange('payments', 0, -1);
     
@@ -74,7 +77,6 @@ if ($method === 'GET' && $requestUri === '/payments-summary') {
     
     foreach ($paymentsJson as $payment) {
         $payment = json_decode($payment, true);
-        
         if (($from && $payment['requested_at'] < $from) || ($to && $payment['requested_at'] > $to)) {
             continue; 
         }
@@ -89,7 +91,7 @@ if ($method === 'GET' && $requestUri === '/payments-summary') {
 
     $summaryData['default']['totalAmount'] = (float) number_format($summaryData['default']['totalAmount'], 2, '.', '');
     $summaryData['fallback']['totalAmount'] = (float) number_format($summaryData['fallback']['totalAmount'], 2, '.', '');
-
+     
     http_response_code(200);
     echo json_encode($summaryData);
     exit;   

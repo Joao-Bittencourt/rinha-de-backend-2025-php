@@ -1,6 +1,6 @@
 services:
     app1:
-        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.5
+        # image: joaogsbittencourt/rinha-de-backend-2025-php-redis:0.1
         build:
             context: .
             dockerfile: Dockerfile
@@ -12,10 +12,11 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.25"
-                    memory: "25MB"
+                    cpus: "0.35"
+                    memory: "56MB"
+
     app2:
-        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.5
+        # image: joaogsbittencourt/rinha-de-backend-2025-php-redis:0.1
         build:
             context: .
             dockerfile: Dockerfile
@@ -27,11 +28,11 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.25"
-                    memory: "25MB"
+                    cpus: "0.35"
+                    memory: "56MB"
 
     app3:
-        # image: joaogsbittencourt/rinha-de-backend-2025-php:1.5
+        # image: joaogsbittencourt/rinha-de-backend-2025-php-redis:0.1
         build:
             context: .
             dockerfile: Dockerfile
@@ -40,13 +41,11 @@ services:
         networks:
             - rinha
             - payment-processor
-        volumes:
-            - ./src/index.php:/var/www/index.php
         deploy:
             resources:
                 limits:
-                    cpus: "0.25"
-                    memory: "25MB"
+                    cpus: "0.35"
+                    memory: "56MB"
 
     nginx:      
         image: nginx:alpine
@@ -63,7 +62,7 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.20"
+                    cpus: "0.15"
                     memory: "30MB"
 
     redis:
@@ -77,11 +76,13 @@ services:
             interval: 5s
             timeout: 5s
             retries: 5
+        ports:
+            - "6380:6379"
         deploy:
             resources:
                 limits:
-                    cpus: "0.55"
-                    memory: "245MB"
+                    cpus: "0.30"
+                    memory: "150MB"
         
 # Redes
 networks:

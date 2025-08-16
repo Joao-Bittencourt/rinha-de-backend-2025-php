@@ -24,6 +24,7 @@ RUN pecl install redis \
     && docker-php-ext-enable redis
 
 
+COPY ./php-fpm.conf /usr/local/etc/php-fpm.d/zz-custom.conf
 COPY ./opcache.ini /usr/local/etc/php/conf.d/10-opcache.ini
 
 COPY ./src/index.php /var/www/index.php
